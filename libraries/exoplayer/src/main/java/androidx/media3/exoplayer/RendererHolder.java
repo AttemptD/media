@@ -50,6 +50,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Objects;
 
+import javax.swing.Renderer;
+
 /** Holds a {@link Renderer renderer}. */
 /* package */ class RendererHolder {
   private static final String TAG = "RendererHolder";
@@ -57,7 +59,8 @@ import java.util.Objects;
   private final Renderer primaryRenderer;
   // Index of renderer in renderer list held by the {@link Player}.
   private final int index;
-  @Nullable private final Renderer secondaryRenderer;
+  @Nullable
+  private final Renderer secondaryRenderer;
   private @RendererPrewarmingState int prewarmingState;
   private boolean primaryRequiresReset;
   private boolean secondaryRequiresReset;
@@ -77,12 +80,11 @@ import java.util.Objects;
 
   public void startPrewarming() {
     checkState(!isPrewarming());
-    prewarmingState =
-        isRendererEnabled(primaryRenderer)
-            ? RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY
-            : secondaryRenderer != null && isRendererEnabled(secondaryRenderer)
-                ? RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
-                : RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY;
+    prewarmingState = isRendererEnabled(primaryRenderer)
+        ? RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY
+        : secondaryRenderer != null && isRendererEnabled(secondaryRenderer)
+            ? RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
+            : RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY;
   }
 
   public boolean isPrewarming() {
@@ -115,15 +117,19 @@ import java.util.Objects;
   }
 
   /**
-   * Returns reading position from the {@link Renderer} enabled on the {@link MediaPeriodHolder
+   * Returns reading position from the {@link Renderer} enabled on the
+   * {@link MediaPeriodHolder
    * media period}.
    *
-   * <p>Call requires that {@link Renderer} is enabled on the provided {@link MediaPeriodHolder
+   * <p>
+   * Call requires that {@link Renderer} is enabled on the provided
+   * {@link MediaPeriodHolder
    * media period}.
    *
    * @param period The {@link MediaPeriodHolder media period}
-   * @return The {@link Renderer#getReadingPositionUs()} from the {@link Renderer} enabled on the
-   *     {@link MediaPeriodHolder media period}.
+   * @return The {@link Renderer#getReadingPositionUs()} from the {@link Renderer}
+   *         enabled on the
+   *         {@link MediaPeriodHolder media period}.
    */
   public long getReadingPositionUs(@Nullable MediaPeriodHolder period) {
     return Objects.requireNonNull(getRendererReadingFromPeriod(period)).getReadingPositionUs();
@@ -140,14 +146,17 @@ import java.util.Objects;
   }
 
   /**
-   * Signals to the renderer that the current {@link SampleStream} will be the final one supplied
+   * Signals to the renderer that the current {@link SampleStream} will be the
+   * final one supplied
    * before it is next disabled or reset.
    *
    * @see Renderer#setCurrentStreamFinal()
-   * @param mediaPeriodHolder The {@link MediaPeriodHolder media period} containing the current
-   *     stream.
-   * @param streamEndPositionUs The position to stop rendering at or {@link C#LENGTH_UNSET} to
-   *     render until the end of the current stream.
+   * @param mediaPeriodHolder   The {@link MediaPeriodHolder media period}
+   *                            containing the current
+   *                            stream.
+   * @param streamEndPositionUs The position to stop rendering at or
+   *                            {@link C#LENGTH_UNSET} to
+   *                            render until the end of the current stream.
    */
   public void setCurrentStreamFinal(MediaPeriodHolder mediaPeriodHolder, long streamEndPositionUs) {
     Renderer renderer = checkNotNull(getRendererReadingFromPeriod(mediaPeriodHolder));
@@ -155,15 +164,37 @@ import java.util.Objects;
   }
 
   /**
-   * Maybe signal to the renderer that the old {@link SampleStream} will be the final one supplied
+   * Signals to the renderer that the current {@link SampleStream} will be the
+   * final one supplied
    * before it is next disabled or reset.
    *
-   * @param oldTrackSelectorResult {@link TrackSelectorResult} containing the previous {@link
-   *     SampleStream}.
-   * @param newTrackSelectorResult {@link TrackSelectorResult} containing the next {@link
-   *     SampleStream}.
-   * @param streamEndPositionUs The position to stop rendering at or {@link C#LENGTH_UNSET} to
-   *     render until the end of the current stream.
+   * @see Renderer#setCurrentStreamFinal()
+   * @param streamEndPositionUs The position to stop rendering at or
+   *                            {@link C#LENGTH_UNSET} to
+   *                            render until the end of the current stream.
+   */
+  public void setCurrentStreamFinal(long streamEndPositionUs) {
+    boolean isPrimaryRenderer = secondaryRenderer == null
+        || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY
+        || prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY;
+    Renderer renderer = isPrimaryRenderer ? primaryRenderer : checkNotNull(secondaryRenderer);
+    setCurrentStreamFinalInternal(renderer, streamEndPositionUs);
+  }
+
+  /**
+   * Maybe signal to the renderer that the old {@link SampleStream} will be the
+   * final one supplied
+   * before it is next disabled or reset.
+   *
+   * @param oldTrackSelectorResult {@link TrackSelectorResult} containing the
+   *                               previous {@link
+   *                               SampleStream}.
+   * @param newTrackSelectorResult {@link TrackSelectorResult} containing the next
+   *                               {@link
+   *                               SampleStream}.
+   * @param streamEndPositionUs    The position to stop rendering at or
+   *                               {@link C#LENGTH_UNSET} to
+   *                               render until the end of the current stream.
    */
   public void maybeSetOldStreamToFinal(
       TrackSelectorResult oldTrackSelectorResult,
@@ -171,11 +202,10 @@ import java.util.Objects;
       long streamEndPositionUs) {
     boolean oldRendererEnabled = oldTrackSelectorResult.isRendererEnabled(index);
     boolean newRendererEnabled = newTrackSelectorResult.isRendererEnabled(index);
-    boolean isPrimaryOldRenderer =
-        secondaryRenderer == null
-            || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY
-            || (prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
-                && isRendererEnabled(primaryRenderer));
+    boolean isPrimaryOldRenderer = secondaryRenderer == null
+        || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY
+        || (prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
+            && isRendererEnabled(primaryRenderer));
     Renderer oldRenderer = isPrimaryOldRenderer ? primaryRenderer : checkNotNull(secondaryRenderer);
     if (oldRendererEnabled && !oldRenderer.isCurrentStreamFinal()) {
       boolean isNoSampleRenderer = getTrackType() == C.TRACK_TYPE_NONE;
@@ -185,11 +215,16 @@ import java.util.Objects;
           || !Objects.equals(newConfig, oldConfig)
           || isNoSampleRenderer
           || isPrewarming()) {
-        // The renderer will be disabled when transitioning to playing the next period, because
-        // there's no new selection, or because a configuration change is required, or because
-        // it's a no-sample renderer for which rendererOffsetUs should be updated only when
-        // starting to play the next period, or there is a backup renderer that has already been
-        // enabled for the following media item. Mark the SampleStream as final to play out any
+        // The renderer will be disabled when transitioning to playing the next period,
+        // because
+        // there's no new selection, or because a configuration change is required, or
+        // because
+        // it's a no-sample renderer for which rendererOffsetUs should be updated only
+        // when
+        // starting to play the next period, or there is a backup renderer that has
+        // already been
+        // enabled for the following media item. Mark the SampleStream as final to play
+        // out any
         // remaining data.
         setCurrentStreamFinalInternal(oldRenderer, streamEndPositionUs);
       }
@@ -197,7 +232,8 @@ import java.util.Objects;
   }
 
   /**
-   * Calls {@link Renderer#setCurrentStreamFinal} on enabled {@link Renderer renderers} that are not
+   * Calls {@link Renderer#setCurrentStreamFinal} on enabled {@link Renderer
+   * renderers} that are not
    * pre-warming.
    *
    * @see Renderer#setCurrentStreamFinal
@@ -223,38 +259,46 @@ import java.util.Objects;
   }
 
   /**
-   * Returns minimum amount of playback clock time that must pass in order for the {@link #render}
+   * Returns minimum amount of playback clock time that must pass in order for the
+   * {@link #render}
    * call to make progress.
    *
-   * <p>Returns {@code Long.MAX_VALUE} if {@link Renderer renderers} are not enabled.
+   * <p>
+   * Returns {@code Long.MAX_VALUE} if {@link Renderer renderers} are not enabled.
    *
    * @see Renderer#getDurationToProgressUs
-   * @param rendererPositionUs The current render position in microseconds, measured at the start of
-   *     the current iteration of the rendering loop.
-   * @param rendererPositionElapsedRealtimeUs {@link android.os.SystemClock#elapsedRealtime()} in
-   *     microseconds, measured at the start of the current iteration of the rendering loop.
-   * @return Minimum amount of playback clock time that must pass before renderer is able to make
-   *     progress.
+   * @param rendererPositionUs                The current render position in
+   *                                          microseconds, measured at the start
+   *                                          of
+   *                                          the current iteration of the
+   *                                          rendering loop.
+   * @param rendererPositionElapsedRealtimeUs {@link android.os.SystemClock#elapsedRealtime()}
+   *                                          in
+   *                                          microseconds, measured at the start
+   *                                          of the current iteration of the
+   *                                          rendering loop.
+   * @return Minimum amount of playback clock time that must pass before renderer
+   *         is able to make
+   *         progress.
    */
   public long getMinDurationToProgressUs(
       long rendererPositionUs, long rendererPositionElapsedRealtimeUs) {
-    long minDurationToProgress =
-        isRendererEnabled(primaryRenderer)
-            ? primaryRenderer.getDurationToProgressUs(
-                rendererPositionUs, rendererPositionElapsedRealtimeUs)
-            : Long.MAX_VALUE;
+    long minDurationToProgress = isRendererEnabled(primaryRenderer)
+        ? primaryRenderer.getDurationToProgressUs(
+            rendererPositionUs, rendererPositionElapsedRealtimeUs)
+        : Long.MAX_VALUE;
     if (secondaryRenderer != null && isRendererEnabled(secondaryRenderer)) {
-      minDurationToProgress =
-          min(
-              minDurationToProgress,
-              secondaryRenderer.getDurationToProgressUs(
-                  rendererPositionUs, rendererPositionElapsedRealtimeUs));
+      minDurationToProgress = min(
+          minDurationToProgress,
+          secondaryRenderer.getDurationToProgressUs(
+              rendererPositionUs, rendererPositionElapsedRealtimeUs));
     }
     return minDurationToProgress;
   }
 
   /**
-   * Calls {@link Renderer#enableMayRenderStartOfStream} on enabled {@link Renderer renderers}.
+   * Calls {@link Renderer#enableMayRenderStartOfStream} on enabled
+   * {@link Renderer renderers}.
    *
    * @see Renderer#enableMayRenderStartOfStream
    */
@@ -309,36 +353,40 @@ import java.util.Objects;
   }
 
   /**
-   * Returns whether {@link Renderer} is enabled on a {@link MediaPeriodHolder media period}.
+   * Returns whether {@link Renderer} is enabled on a {@link MediaPeriodHolder
+   * media period}.
    *
    * @param period The {@link MediaPeriodHolder media period} to check.
-   * @return Whether {@link Renderer} is enabled on a {@link MediaPeriodHolder media period}.
+   * @return Whether {@link Renderer} is enabled on a {@link MediaPeriodHolder
+   *         media period}.
    */
   public boolean isReadingFromPeriod(@Nullable MediaPeriodHolder period) {
     return getRendererReadingFromPeriod(period) != null;
   }
 
   /**
-   * Returns whether a {@link Renderer} is prewarming and enabled on a {@link MediaPeriodHolder
+   * Returns whether a {@link Renderer} is prewarming and enabled on a
+   * {@link MediaPeriodHolder
    * media period}.
    *
    * @param period The {@link MediaPeriodHolder media period} to check.
    */
   public boolean isPrewarmingPeriod(MediaPeriodHolder period) {
-    boolean isPrimaryRendererPrewarming =
-        isPrimaryRendererPrewarming() && getRendererReadingFromPeriod(period) == primaryRenderer;
-    boolean isSecondaryRendererPrewarming =
-        isSecondaryRendererPrewarming()
-            && getRendererReadingFromPeriod(period) == secondaryRenderer;
+    boolean isPrimaryRendererPrewarming = isPrimaryRendererPrewarming()
+        && getRendererReadingFromPeriod(period) == primaryRenderer;
+    boolean isSecondaryRendererPrewarming = isSecondaryRendererPrewarming()
+        && getRendererReadingFromPeriod(period) == secondaryRenderer;
     return isPrimaryRendererPrewarming || isSecondaryRendererPrewarming;
   }
 
   /**
-   * Returns whether the {@link Renderer renderers} are still reading a {@link MediaPeriodHolder
+   * Returns whether the {@link Renderer renderers} are still reading a
+   * {@link MediaPeriodHolder
    * media period}.
    *
    * @param periodHolder The {@link MediaPeriodHolder media period} to check.
-   * @return true if {@link Renderer renderers} are reading the current reading period.
+   * @return true if {@link Renderer renderers} are reading the current reading
+   *         period.
    */
   public boolean hasFinishedReadingFromPeriod(MediaPeriodHolder periodHolder) {
     return hasFinishedReadingFromPeriodInternal(periodHolder, primaryRenderer)
@@ -358,10 +406,16 @@ import java.util.Objects;
                 && !hasReachedServerSideInsertedAdsTransition(renderer, readingPeriodHolder)))) {
       // The current reading period is still being read by at least one renderer.
       MediaPeriodHolder followingPeriod = readingPeriodHolder.getNext();
-      // If renderer is reading ahead as it was enabled early, then it is not 'reading' the
-      // current reading period.
-      return followingPeriod != null
-          && followingPeriod.sampleStreams[index] == renderer.getStream();
+      while (followingPeriod != null) {
+        // If renderer is reading ahead as it was enabled early, then it is not
+        // 'reading' the
+        // current reading period.
+        if (Objects.equals(followingPeriod.sampleStreams[index], renderer.getStream())) {
+          return true;
+        }
+        followingPeriod = followingPeriod.getNext();
+      }
+      return false;
     }
     return true;
   }
@@ -369,10 +423,14 @@ import java.util.Objects;
   private boolean hasReachedServerSideInsertedAdsTransition(
       Renderer renderer, MediaPeriodHolder reading) {
     MediaPeriodHolder nextPeriod = reading.getNext();
-    // We can advance the reading period early once we read beyond the transition point in a
-    // server-side inserted ads stream because we know the samples are read from the same underlying
-    // stream. This shortcut is helpful in case the transition point moved and renderers already
-    // read beyond the new transition point. But wait until the next period is actually prepared to
+    // We can advance the reading period early once we read beyond the transition
+    // point in a
+    // server-side inserted ads stream because we know the samples are read from the
+    // same underlying
+    // stream. This shortcut is helpful in case the transition point moved and
+    // renderers already
+    // read beyond the new transition point. But wait until the next period is
+    // actually prepared to
     // allow a seamless transition.
     return reading.info.isFollowedByTransitionToSameStream
         && nextPeriod != null
@@ -385,10 +443,16 @@ import java.util.Objects;
   /**
    * Calls {@link Renderer#render} on all enabled {@link Renderer renderers}.
    *
-   * @param rendererPositionUs The current media time in microseconds, measured at the start of the
-   *     current iteration of the rendering loop.
-   * @param rendererPositionElapsedRealtimeUs {@link android.os.SystemClock#elapsedRealtime()} in
-   *     microseconds, measured at the start of the current iteration of the rendering loop.
+   * @param rendererPositionUs                The current media time in
+   *                                          microseconds, measured at the start
+   *                                          of the
+   *                                          current iteration of the rendering
+   *                                          loop.
+   * @param rendererPositionElapsedRealtimeUs {@link android.os.SystemClock#elapsedRealtime()}
+   *                                          in
+   *                                          microseconds, measured at the start
+   *                                          of the current iteration of the
+   *                                          rendering loop.
    * @throws ExoPlaybackException If an error occurs.
    */
   public void render(long rendererPositionUs, long rendererPositionElapsedRealtimeUs)
@@ -404,13 +468,19 @@ import java.util.Objects;
   /**
    * Returns whether the renderers allow playback to continue.
    *
-   * <p>Determine whether the renderer allows playback to continue. Playback can continue if the
-   * renderer is ready or ended. Also continue playback if the renderer is reading ahead into the
-   * next stream or is waiting for the next stream. This is to avoid getting stuck if tracks in the
-   * current period have uneven durations and are still being read by another renderer. See:
+   * <p>
+   * Determine whether the renderer allows playback to continue. Playback can
+   * continue if the
+   * renderer is ready or ended. Also continue playback if the renderer is reading
+   * ahead into the
+   * next stream or is waiting for the next stream. This is to avoid getting stuck
+   * if tracks in the
+   * current period have uneven durations and are still being read by another
+   * renderer. See:
    * https://github.com/google/ExoPlayer/issues/1874.
    *
-   * @param playingPeriodHolder The currently playing media {@link MediaPeriodHolder period}.
+   * @param playingPeriodHolder The currently playing media
+   *                            {@link MediaPeriodHolder period}.
    * @return whether renderer allows playback.
    */
   public boolean allowsPlayback(MediaPeriodHolder playingPeriodHolder) {
@@ -422,7 +492,8 @@ import java.util.Objects;
   }
 
   /**
-   * Invokes {@link Renderer#maybeThrowStreamError()} for {@link Renderer} enabled on {@link
+   * Invokes {@link Renderer#maybeThrowStreamError()} for {@link Renderer} enabled
+   * on {@link
    * MediaPeriodHolder media period}.
    *
    * @see Renderer#maybeThrowStreamError()
@@ -467,20 +538,28 @@ import java.util.Objects;
    * Enables the renderer to consume from the specified {@link SampleStream}.
    *
    * @see Renderer#enable
-   * @param configuration The renderer configuration.
-   * @param trackSelection The track selection for the {@link Renderer}.
-   * @param stream The {@link SampleStream} from which the renderer should consume.
-   * @param positionUs The player's current position.
-   * @param joining Whether this renderer is being enabled to join an ongoing playback.
-   * @param mayRenderStartOfStream Whether this renderer is allowed to render the start of the
-   *     stream even if the state is not {@link Renderer#STATE_STARTED} yet.
-   * @param startPositionUs The start position of the stream in renderer time (microseconds).
-   * @param offsetUs The offset to be added to timestamps of buffers read from {@code stream} before
-   *     they are rendered.
-   * @param mediaPeriodId The {@link MediaSource.MediaPeriodId} of the {@link MediaPeriod} producing
-   *     the {@code stream}.
-   * @param mediaClock The {@link DefaultMediaClock} with which to call {@link
-   *     DefaultMediaClock#onRendererEnabled(Renderer)}.
+   * @param configuration          The renderer configuration.
+   * @param trackSelection         The track selection for the {@link Renderer}.
+   * @param stream                 The {@link SampleStream} from which the
+   *                               renderer should consume.
+   * @param positionUs             The player's current position.
+   * @param joining                Whether this renderer is being enabled to join
+   *                               an ongoing playback.
+   * @param mayRenderStartOfStream Whether this renderer is allowed to render the
+   *                               start of the
+   *                               stream even if the state is not
+   *                               {@link Renderer#STATE_STARTED} yet.
+   * @param startPositionUs        The start position of the stream in renderer
+   *                               time (microseconds).
+   * @param offsetUs               The offset to be added to timestamps of buffers
+   *                               read from {@code stream} before
+   *                               they are rendered.
+   * @param mediaPeriodId          The {@link MediaSource.MediaPeriodId} of the
+   *                               {@link MediaPeriod} producing
+   *                               the {@code stream}.
+   * @param mediaClock             The {@link DefaultMediaClock} with which to
+   *                               call {@link
+   *                               DefaultMediaClock#onRendererEnabled(Renderer)}.
    * @throws ExoPlaybackException If an error occurs.
    */
   public void enable(
@@ -496,10 +575,9 @@ import java.util.Objects;
       DefaultMediaClock mediaClock)
       throws ExoPlaybackException {
     Format[] formats = getFormats(trackSelection);
-    boolean enablePrimary =
-        prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
-            || prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY
-            || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY;
+    boolean enablePrimary = prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
+        || prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY
+        || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY;
     if (enablePrimary) {
       primaryRequiresReset = true;
       primaryRenderer.enable(
@@ -531,7 +609,8 @@ import java.util.Objects;
   }
 
   /**
-   * Invokes {@link Renderer#handleMessage} on the {@link Renderer} enabled on the {@link
+   * Invokes {@link Renderer#handleMessage} on the {@link Renderer} enabled on the
+   * {@link
    * MediaPeriodHolder media period}.
    *
    * @see Renderer#handleMessage(int, Object)
@@ -546,13 +625,17 @@ import java.util.Objects;
   }
 
   /**
-   * Enables or disables scrubbing mode through a {@link Renderer#handleMessage} with {@link
+   * Enables or disables scrubbing mode through a {@link Renderer#handleMessage}
+   * with {@link
    * Renderer#MSG_SET_SCRUBBING_MODE}.
    *
-   * <p>If {@code scrubbingModeParameters} is {@code null} then scrubbing mode will be disabled.
+   * <p>
+   * If {@code scrubbingModeParameters} is {@code null} then scrubbing mode will
+   * be disabled.
    *
-   * @param scrubbingModeParameters The {@link ScrubbingModeParameters} to set unto the {@link
-   *     Renderer}.
+   * @param scrubbingModeParameters The {@link ScrubbingModeParameters} to set
+   *                                unto the {@link
+   *                                Renderer}.
    * @see Renderer#MSG_SET_SCRUBBING_MODE
    */
   public void setScrubbingMode(@Nullable ScrubbingModeParameters scrubbingModeParameters)
@@ -566,15 +649,15 @@ import java.util.Objects;
   /**
    * Stops and disables all {@link Renderer renderers}.
    *
-   * @param mediaClock To call {@link DefaultMediaClock#onRendererDisabled} if disabling a {@link
-   *     Renderer}.
+   * @param mediaClock To call {@link DefaultMediaClock#onRendererDisabled} if
+   *                   disabling a {@link
+   *                   Renderer}.
    */
   public void disable(DefaultMediaClock mediaClock) throws ExoPlaybackException {
     disableRenderer(primaryRenderer, mediaClock);
     if (secondaryRenderer != null) {
-      boolean shouldTransferResources =
-          isRendererEnabled(secondaryRenderer)
-              && prewarmingState != RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY;
+      boolean shouldTransferResources = isRendererEnabled(secondaryRenderer)
+          && prewarmingState != RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY;
       disableRenderer(secondaryRenderer, mediaClock);
       maybeResetRenderer(/* resetPrimary= */ false);
       if (shouldTransferResources) {
@@ -589,12 +672,10 @@ import java.util.Objects;
     if (prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY
         || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY) {
       transferResources(
-          /* transferToPrimary= */ prewarmingState
-              == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY);
-      prewarmingState =
-          prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
-              ? RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
-              : RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY;
+          /* transferToPrimary= */ prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY);
+      prewarmingState = prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
+          ? RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
+          : RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY;
     } else if (prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY) {
       prewarmingState = RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY;
     }
@@ -612,11 +693,9 @@ import java.util.Objects;
     if (!isPrewarming()) {
       return;
     }
-    boolean isPrewarmingPrimary =
-        prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
-            || prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY;
-    boolean isSecondaryActiveRenderer =
-        prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY;
+    boolean isPrewarmingPrimary = prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
+        || prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY;
+    boolean isSecondaryActiveRenderer = prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY;
     try {
       disableRenderer(
           isPrewarmingPrimary ? primaryRenderer : checkNotNull(secondaryRenderer), mediaClock);
@@ -630,10 +709,9 @@ import java.util.Objects;
       // There's nothing we can do.
       Log.e(TAG, "Reset prewarming failed.", e);
     }
-    prewarmingState =
-        isSecondaryActiveRenderer
-            ? RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY
-            : RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY;
+    prewarmingState = isSecondaryActiveRenderer
+        ? RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY
+        : RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY;
   }
 
   public void maybeDisableOrResetPosition(
@@ -662,7 +740,8 @@ import java.util.Objects;
         // We need to disable the renderer.
         disableRenderer(renderer, mediaClock);
       } else if (streamReset) {
-        // The renderer will continue to consume from its current stream, but needs to be reset.
+        // The renderer will continue to consume from its current stream, but needs to
+        // be reset.
         renderer.resetPosition(rendererPositionUs, /* sampleStreamIsResetToKeyFrame= */ true);
       }
     }
@@ -671,13 +750,16 @@ import java.util.Objects;
   /**
    * Disable a {@link Renderer} if its enabled.
    *
-   * <p>The {@link DefaultMediaClock#onRendererDisabled} callback will be invoked if the renderer is
+   * <p>
+   * The {@link DefaultMediaClock#onRendererDisabled} callback will be invoked if
+   * the renderer is
    * disabled.
    *
-   * @param renderer The {@link Renderer} to disable.
+   * @param renderer   The {@link Renderer} to disable.
    * @param mediaClock The {@link DefaultMediaClock} to invoke {@link
-   *     DefaultMediaClock#onRendererDisabled onRendererDisabled} with the provided {@code
-   *     renderer}.
+   *                   DefaultMediaClock#onRendererDisabled onRendererDisabled}
+   *                   with the provided {@code
+   *     renderer}  .
    */
   private void disableRenderer(Renderer renderer, DefaultMediaClock mediaClock) {
     checkState(primaryRenderer == renderer || secondaryRenderer == renderer);
@@ -690,7 +772,8 @@ import java.util.Objects;
   }
 
   /**
-   * Invokes {@link Renderer#resetPosition} on the {@link Renderer} that is enabled on the provided
+   * Invokes {@link Renderer#resetPosition} on the {@link Renderer} that is
+   * enabled on the provided
    * {@link MediaPeriodHolder media period}.
    *
    * @see Renderer#resetPosition
@@ -705,8 +788,10 @@ import java.util.Objects;
   }
 
   /**
-   * Returns {@code true} if a {@link Renderer} is enabled on the provided {@link MediaPeriodHolder
-   * media period} and if it will support a {@link Renderer#resetPosition} invocation without
+   * Returns {@code true} if a {@link Renderer} is enabled on the provided
+   * {@link MediaPeriodHolder
+   * media period} and if it will support a {@link Renderer#resetPosition}
+   * invocation without
    * resetting the sample stream to a key frame.
    *
    * @see Renderer#supportsResetPositionWithoutKeyFrameReset
@@ -718,7 +803,8 @@ import java.util.Objects;
   }
 
   /**
-   * Calls {@link Renderer#reset()} on all disabled {@link Renderer renderers} that must be reset.
+   * Calls {@link Renderer#reset()} on all disabled {@link Renderer renderers}
+   * that must be reset.
    */
   public void reset() {
     if (!isRendererEnabled(primaryRenderer)) {
@@ -746,12 +832,10 @@ import java.util.Objects;
       TrackSelectorResult newTrackSelectorResult,
       DefaultMediaClock mediaClock)
       throws ExoPlaybackException {
-    int primaryRendererResult =
-        replaceStreamsOrDisableRendererForTransitionInternal(
-            primaryRenderer, readingPeriodHolder, newTrackSelectorResult, mediaClock);
-    int secondaryRendererResult =
-        replaceStreamsOrDisableRendererForTransitionInternal(
-            secondaryRenderer, readingPeriodHolder, newTrackSelectorResult, mediaClock);
+    int primaryRendererResult = replaceStreamsOrDisableRendererForTransitionInternal(
+        primaryRenderer, readingPeriodHolder, newTrackSelectorResult, mediaClock);
+    int secondaryRendererResult = replaceStreamsOrDisableRendererForTransitionInternal(
+        secondaryRenderer, readingPeriodHolder, newTrackSelectorResult, mediaClock);
     return primaryRendererResult == REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED
         ? secondaryRendererResult
         : primaryRendererResult;
@@ -769,15 +853,15 @@ import java.util.Objects;
         || (renderer == secondaryRenderer && isSecondaryRendererPrewarming())) {
       return REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED;
     }
-    boolean rendererIsReadingOldStream =
-        renderer.getStream() != readingPeriodHolder.sampleStreams[index];
+    boolean rendererIsReadingOldStream = renderer.getStream() != readingPeriodHolder.sampleStreams[index];
     boolean rendererShouldBeEnabled = newTrackSelectorResult.isRendererEnabled(index);
     if (rendererShouldBeEnabled && !rendererIsReadingOldStream) {
       // All done.
       return REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED;
     }
     if (!renderer.isCurrentStreamFinal()) {
-      // The renderer stream is not final, so we can replace the sample streams immediately.
+      // The renderer stream is not final, so we can replace the sample streams
+      // immediately.
       Format[] formats = getFormats(newTrackSelectorResult.selections[index]);
       renderer.replaceStream(
           formats,
@@ -785,7 +869,8 @@ import java.util.Objects;
           readingPeriodHolder.getStartPositionRendererTime(),
           readingPeriodHolder.getRendererOffset(),
           readingPeriodHolder.info.id);
-      // Prevent sleeping across offload track transition else position won't get updated.
+      // Prevent sleeping across offload track transition else position won't get
+      // updated.
       return REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED
           | REPLACE_STREAMS_DISABLE_RENDERERS_DISABLE_OFFLOAD_SCHEDULING;
     } else if (renderer.isEnded()) {
@@ -835,7 +920,9 @@ import java.util.Objects;
 
   public void setVideoFrameMetadataListener(VideoFrameMetadataListener videoFrameMetadataListener)
       throws ExoPlaybackException {
-    if (getTrackType() != TRACK_TYPE_VIDEO) {
+    // TODO: b/507835122 - Remove image track type once metadata listener handling
+    // is refined.
+    if (getTrackType() != TRACK_TYPE_VIDEO && getTrackType() != TRACK_TYPE_IMAGE) {
       return;
     }
     primaryRenderer.handleMessage(
@@ -880,11 +967,21 @@ import java.util.Objects;
     }
   }
 
+  /** Sets the audio session ID on the renderer. */
+  public void setAudioSessionId(int audioSessionId) throws ExoPlaybackException {
+    if (getTrackType() != TRACK_TYPE_AUDIO && getTrackType() != TRACK_TYPE_VIDEO) {
+      return;
+    }
+    primaryRenderer.handleMessage(Renderer.MSG_SET_AUDIO_SESSION_ID, audioSessionId);
+    if (secondaryRenderer != null) {
+      secondaryRenderer.handleMessage(Renderer.MSG_SET_AUDIO_SESSION_ID, audioSessionId);
+    }
+  }
+
   public boolean isRendererEnabled() {
-    boolean checkPrimary =
-        prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
-            || prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY
-            || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY;
+    boolean checkPrimary = prewarmingState == RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY
+        || prewarmingState == RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY
+        || prewarmingState == RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY;
     return checkPrimary
         ? isRendererEnabled(primaryRenderer)
         : isRendererEnabled(checkNotNull(secondaryRenderer));
@@ -895,15 +992,19 @@ import java.util.Objects;
   }
 
   /**
-   * Returns the {@link Renderer} that is enabled on the provided media {@link MediaPeriodHolder
+   * Returns the {@link Renderer} that is enabled on the provided media
+   * {@link MediaPeriodHolder
    * period}.
    *
-   * <p>Returns null if the renderer is not enabled on the requested period.
+   * <p>
+   * Returns null if the renderer is not enabled on the requested period.
    *
-   * @param period The {@link MediaPeriodHolder period} with which to retrieve the linked {@link
-   *     Renderer}
-   * @return {@link Renderer} enabled on the {@link MediaPeriodHolder period} or {@code null} if the
-   *     renderer is not enabled on the provided period.
+   * @param period The {@link MediaPeriodHolder period} with which to retrieve the
+   *               linked {@link
+   *               Renderer}
+   * @return {@link Renderer} enabled on the {@link MediaPeriodHolder period} or
+   *         {@code null} if the
+   *         renderer is not enabled on the provided period.
    */
   @Nullable
   private Renderer getRendererReadingFromPeriod(@Nullable MediaPeriodHolder period) {
@@ -924,68 +1025,78 @@ import java.util.Objects;
   @Retention(RetentionPolicy.SOURCE)
   @Target(TYPE_USE)
   @IntDef({
-    RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY,
-    RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY,
-    RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY,
-    RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY,
-    RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
+      RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY,
+      RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY,
+      RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY,
+      RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY,
+      RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY
   })
-  @interface RendererPrewarmingState {}
+  @interface RendererPrewarmingState {
+  }
 
   /**
-   * ExoPlayer is not currently transitioning between two enabled renderers for subsequent media
+   * ExoPlayer is not currently transitioning between two enabled renderers for
+   * subsequent media
    * items and is using the primary renderer.
    */
   /* package */ static final int RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_PRIMARY = 0;
 
   /**
-   * ExoPlayer is not currently transitioning between two enabled renderers for subsequent media
+   * ExoPlayer is not currently transitioning between two enabled renderers for
+   * subsequent media
    * items and is using the secondary renderer.
    */
   /* package */ static final int RENDERER_PREWARMING_STATE_NOT_PREWARMING_USING_SECONDARY = 1;
 
   /**
-   * ExoPlayer is currently pre-warming the primary renderer that is not being used for the current
+   * ExoPlayer is currently pre-warming the primary renderer that is not being
+   * used for the current
    * media item for a subsequent media item.
    */
   /* package */ static final int RENDERER_PREWARMING_STATE_PREWARMING_PRIMARY = 2;
 
   /**
-   * Both a primary and secondary renderer are enabled and ExoPlayer is transitioning to a media
+   * Both a primary and secondary renderer are enabled and ExoPlayer is
+   * transitioning to a media
    * item using the secondary renderer.
    */
   /* package */ static final int RENDERER_PREWARMING_STATE_TRANSITIONING_TO_SECONDARY = 3;
 
   /**
-   * Both a primary and secondary renderer are enabled and ExoPlayer is transitioning to a media
+   * Both a primary and secondary renderer are enabled and ExoPlayer is
+   * transitioning to a media
    * item using the primary renderer.
    */
   /* package */ static final int RENDERER_PREWARMING_STATE_TRANSITIONING_TO_PRIMARY = 4;
 
-  /** Results for calls to {@link #replaceStreamsOrDisableRendererForTransition}. */
+  /**
+   * Results for calls to {@link #replaceStreamsOrDisableRendererForTransition}.
+   */
   @Documented
   @Retention(RetentionPolicy.SOURCE)
   @Target(TYPE_USE)
-  @IntDef(
-      flag = true,
-      value = {
-        REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED,
-        REPLACE_STREAMS_DISABLE_RENDERERS_DISABLE_OFFLOAD_SCHEDULING
-      })
-  /* package */ @interface ReplaceStreamsOrDisableRendererResult {}
+  @IntDef(flag = true, value = {
+      REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED,
+      REPLACE_STREAMS_DISABLE_RENDERERS_DISABLE_OFFLOAD_SCHEDULING
+  })
+  /* package */ @interface ReplaceStreamsOrDisableRendererResult {
+  }
 
   /**
-   * The call to {@link #replaceStreamsOrDisableRendererForTransition} has completed processing
-   * {@link Renderer#replaceStream} or {@link Renderer#disable()} on all renderers enabled on the
+   * The call to {@link #replaceStreamsOrDisableRendererForTransition} has
+   * completed processing
+   * {@link Renderer#replaceStream} or {@link Renderer#disable()} on all renderers
+   * enabled on the
    * current playing period.
    */
   /* package */ static final int REPLACE_STREAMS_DISABLE_RENDERERS_COMPLETED = 1;
 
   /**
-   * The call to {@link #replaceStreamsOrDisableRendererForTransition} invoked {@link
-   * Renderer#replaceStream} and so therefore offload should be disabled until after the media
+   * The call to {@link #replaceStreamsOrDisableRendererForTransition} invoked
+   * {@link
+   * Renderer#replaceStream} and so therefore offload should be disabled until
+   * after the media
    * transition.
    */
-  /* package */ static final int REPLACE_STREAMS_DISABLE_RENDERERS_DISABLE_OFFLOAD_SCHEDULING =
-      1 << 1;
+  /* package */ static final int REPLACE_STREAMS_DISABLE_RENDERERS_DISABLE_OFFLOAD_SCHEDULING = 1 << 1;
 }
