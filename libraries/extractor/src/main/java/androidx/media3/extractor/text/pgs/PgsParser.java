@@ -480,7 +480,9 @@ public final class PgsParser implements SubtitleParser {
               bitmapHeight,
               Bitmap.Config.ARGB_8888);
       int maxDim = Math.max(bitmapWidth, bitmapHeight);
-      if (maxDim > PGS_BITMAP_MAX_DIMENSION) {
+      float centerY = (y + bitmapHeight * 0.5f) / planeHeight;
+      boolean isAtBottom = centerY >= 2f / 3f;
+      if (maxDim > PGS_BITMAP_MAX_DIMENSION && !isAtBottom) {
         float scale = (float) PGS_BITMAP_MAX_DIMENSION / maxDim;
         int scaledWidth = Math.round(bitmapWidth * scale);
         int scaledHeight = Math.round(bitmapHeight * scale);

@@ -551,22 +551,6 @@ public interface Renderer extends PlayerMessage.Target {
    * values delay
    * subtitles; negative values show them earlier.
    */
-
-  *
-  The type
-  of a
-  message that
-  can be
-  passed to
-  an image
-  renderer via
-  {@link
-   * ExoPlayer#createMessage(PlayerMessage.Target)}.
-  The message
-  payload should
-  be an
-  {@link
-   * ImageMetadataListener}instance,or null.*/
   int MSG_SET_IMAGE_METADATA_LISTENER = 23;
 
   int MSG_SET_SUBTITLE_OFFSET = 24;

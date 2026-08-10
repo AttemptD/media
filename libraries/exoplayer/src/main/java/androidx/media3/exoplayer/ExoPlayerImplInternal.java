@@ -844,6 +844,7 @@ import java.util.Objects;
           break;
         case MSG_SET_IMAGE_METADATA_LISTENER:
           setImageMetadataListenerInternal((ImageMetadataListener) msg.obj);
+          break;
         case MSG_SET_SUBTITLE_OFFSET:
           setSubtitleOffsetMsInternal(((Long) checkNotNull(msg.obj)).longValue());
           break;
