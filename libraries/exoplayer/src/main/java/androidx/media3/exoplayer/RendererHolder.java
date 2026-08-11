@@ -50,8 +50,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Objects;
 
-import javax.swing.Renderer;
-
 /** Holds a {@link Renderer renderer}. */
 /* package */ class RendererHolder {
   private static final String TAG = "RendererHolder";
