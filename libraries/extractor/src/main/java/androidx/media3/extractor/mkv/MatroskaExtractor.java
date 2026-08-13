@@ -501,6 +501,9 @@ public class MatroskaExtractor implements Extractor {
   private boolean seekForCues;
   private long cuesContentPosition = C.INDEX_UNSET;
   private long seekPositionAfterBuildingCues = C.INDEX_UNSET;
+  private boolean seekForSeekContent;
+  private long seekHeadContentPosition = C.INDEX_UNSET;
+  private long seekPositionAfterSeekingForHead = C.INDEX_UNSET;
   private long tracksContentPosition = C.INDEX_UNSET;
   private boolean seekForTracks;
   private long seekPositionAfterReadingTracks = C.INDEX_UNSET;
@@ -600,6 +603,10 @@ public class MatroskaExtractor implements Extractor {
     encryptionSubsampleData = new ParsableByteArray();
     supplementalData = new ParsableByteArray();
     blockSampleSizes = new int[1];
+    inCuesElement = false;
+    seekForSeekContent = false;
+    seekHeadContentPosition = C.INDEX_UNSET;
+    seekPositionAfterSeekingForHead = C.INDEX_UNSET;
     pendingEndTracks = true;
   }
 
@@ -651,9 +658,8 @@ public class MatroskaExtractor implements Extractor {
     boolean continueReading = true;
     while (continueReading && !haveOutputSample) {
       continueReading = reader.read(input);
-      if (continueReading
-          && (maybeSeekForTracks(seekPosition, input.getPosition())
-          || maybeSeekForCues(seekPosition, input.getPosition()))) {
+      if (maybeSeekForTracks(seekPosition, input.getPosition())
+          || maybeSeekForCues(seekPosition, input.getPosition())) {
         return Extractor.RESULT_SEEK;
       }
     }
@@ -858,6 +864,10 @@ public class MatroskaExtractor implements Extractor {
           if (seekForCuesEnabled && cuesContentPosition != C.INDEX_UNSET) {
             // We know where the Cues element is located. Seek to request it.
             seekForCues = true;
+          } else if (seekForCuesEnabled && seekHeadContentPosition != C.INDEX_UNSET) {
+            // We do not know where the cues are located, however we have a seek-head entry
+            // we have not yet visited
+            seekForSeekContent = true;
           } else {
             // We don't know where the Cues element is located. It's most likely omitted. Allow
             // playback, but disable seeking.
@@ -917,8 +927,13 @@ public class MatroskaExtractor implements Extractor {
         }
         if (seekEntryId == ID_CUES) {
           cuesContentPosition = seekEntryPosition;
+          if (seekForCuesEnabled && seekPositionAfterSeekingForHead != C.INDEX_UNSET) {
+            seekForCues = true;
+          }
         } else if (seekEntryId == ID_TRACKS) {
           tracksContentPosition = seekEntryPosition;
+        } else if (seekEntryId == ID_SEEK_HEAD) {
+          seekHeadContentPosition = seekEntryPosition;
         }
         break;
       case ID_CUES:
@@ -2187,6 +2202,13 @@ public class MatroskaExtractor implements Extractor {
    * @return Whether the seek position was updated.
    */
   private boolean maybeSeekForCues(PositionHolder seekPosition, long currentPosition) {
+    if (seekForSeekContent) {
+      seekPositionAfterSeekingForHead = currentPosition;
+      seekPosition.position = seekHeadContentPosition;
+      seekForSeekContent = false;
+      return true;
+    }
+
     if (seekForCues) {
       seekPositionAfterBuildingCues = currentPosition;
       seekPosition.position = cuesContentPosition;
@@ -2200,6 +2222,16 @@ public class MatroskaExtractor implements Extractor {
       seekPositionAfterBuildingCues = C.INDEX_UNSET;
       return true;
     }
+
+    // After we have seeked back from seekPositionAfterBuildingCues seek back again
+    // to parse the rest of the file. This ends the double jump that is preformed
+    // when the beginning metadata only contains a ID_SEEK_HEAD without a ID_CUES.
+    if (sentSeekMap && seekPositionAfterSeekingForHead != C.INDEX_UNSET) {
+      seekPosition.position = seekPositionAfterSeekingForHead;
+      seekPositionAfterSeekingForHead = C.INDEX_UNSET;
+      return true;
+    }
+
     return false;
   }
 
